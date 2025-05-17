@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identity Verification DApp</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css" rel="stylesheet">
+    <style>
+        .toastify { font-family: 'Arial', sans-serif; }
+        .input-group { transition: all 0.2s; }
+        .input-group input:focus { border-color: #3b82f6; outline: none; }
+        .btn-disabled { opacity: 0.5; cursor: not-allowed; }
+        .tab-active { background-color: #3b82f6; color: white; }
+        .tab-inactive { background-color: #e5e7eb; color: #374151; }
+        .tab-inactive:hover { background-color: #d1d5db; }
+        @media (max-width: 640px) {
+            .card { padding: 1rem; }
+            h2 { font-size: 1.5rem; }
+            .tabs button { font-size: 0.875rem; padding: 0.5rem; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="container mx-auto p-4 max-w-2xl">
+        <div class="bg-white shadow-lg rounded-lg p-6 card">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Identity Verification DApp</h2>
+            <div id="walletStatus" class="text-center mb-4 text-gray-600"></div>
+
+            <!-- Tabs -->
+            <div class="tabs flex justify-center mb-6">
+                <button id="userTab" class="tab-active px-4 py-2 rounded-l-md font-semibold" onclick="showPanel('user')">User</button>
+                <button id="adminTab" class="tab-inactive px-4 py-2 rounded-r-md font-semibold" onclick="showPanel('admin')">Admin</button>
+            </div>
+
+            <!-- User Panel -->
+            <div id="userPanel" class="panel">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">User Actions</h3>
+                <!-- Register Identity -->
+                <div class="mb-6">
+                    <h4 class="text-md font-medium text-gray-600 mb-2">Register Identity</h4>
+                    <div class="input-group mb-2">
+                        <label for="name" class="block text-sm font-medium text-gray-600">Name</label>
+                        <input type="text" id="name" class="w-full p-2 border rounded-md" placeholder="Enter your name">
+                    </div>
+                    <div class="input-group mb-2">
+                        <label for="uniqueId" class="block text-sm font-medium text-gray-600">Unique ID (e.g., passport)</label>
+                        <input type="text" id="uniqueId" class="w-full p-2 border rounded-md" placeholder="Enter unique ID">
+                    </div>
+                    <button onclick="registerIdentity()" id="registerBtn" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 disabled:btn-disabled">Register</button>
+                </div>
+                <!-- Check Verification Status -->
+                <div class="mb-6">
+                    <h4 class="text-md font-medium text-gray-600 mb-2">Check Verification Status</h4>
+                    <div class="input-group mb-2">
+                        <label for="checkAddress" class="block text-sm font-medium text-gray-600">User Address</label>
+                        <input type="text" id="checkAddress" class="w-full p-2 border rounded-md" placeholder="Enter address to check">
+                    </div>
+                    <button onclick="checkVerification()" id="checkBtn" class="w-full bg-purple-500 text-white p-2 rounded-md hover:bg-purple-600 disabled:btn-disabled">Check</button>
+                </div>
+            </div>
+
+            <!-- Admin Panel -->
+            <div id="adminPanel" class="panel hidden">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Admin Actions</h3>
+                <!-- Verify Identity -->
+                <div class="mb-6">
+                    <h4 class="text-md font-medium text-gray-600 mb-2">Verify Identity</h4>
+                    <div class="input-group mb-2">
+                        <label for="userAddress" class="block text-sm font-medium text-gray-600">User Address</label>
+                        <input type="text" id="userAddress" class="w-full p-2 border rounded-md" placeholder="Enter user address to verify">
+                    </div>
+                    <button onclick="verifyIdentity()" id="verifyBtn" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600 disabled:btn-disabled">Verify</button>
+                </div>
+                <!-- Add Admin -->
+                <div class="mb-6">
+                    <h4 class="text-md font-medium text-gray-600 mb-2">Add Admin</h4>
+                    <div class="input-group mb-2">
+                        <label for="newAdmin" class="block text-sm font-medium text-gray-600">New Admin Address</label>
+                        <input type="text" id="newAdmin" class="w-full p-2 border rounded-md" placeholder="Enter new admin address">
+                    </div>
+                    <button onclick="addAdmin()" id="adminBtn" class="w-full bg-yellow-500 text-white p-2 rounded-md hover:bg-yellow-600 disabled:btn-disabled">Add Admin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Contract details (replace with your deployed contract's address and ABI)
+        const contractAddress = "YOUR_CONTRACT_ADDRESS";
+        const contractABI = [
+	{
+		"inputs": [],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "uniqueId",
+				"type": "string"
+			}
+		],
+		"name": "IdentityRegistered",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "uniqueId",
+				"type": "string"
+			}
+		],
+		"name": "IdentityVerified",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_newAdmin",
+				"type": "address"
+			}
+		],
+		"name": "addAdmin",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "admins",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			}
+		],
+		"name": "checkVerification",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			}
+		],
+		"name": "getIdentity",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "identities",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "uniqueId",
+				"type": "string"
+			},
+			{
+				"internalType": "bool",
+				"name": "isVerified",
+				"type": "bool"
+			},
+			{
+				"internalType": "address",
+				"name": "userAddress",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_uniqueId",
+				"type": "string"
+			}
+		],
+		"name": "registerIdentity",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			}
+		],
+		"name": "verifyIdentity",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	}
+];
+
+        let web3, contract, accounts;
+
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            Toastify({
+                text: message,
+                duration: 3000,
+                gravity: "top",
+                position: "right",
+                backgroundColor: type === 'success' ? "#10B981" : "#EF4444",
+                stopOnFocus: true
+            }).showToast();
+        }
+
+        // Disable/enable buttons
+        function toggleButtons(disabled) {
+            document.querySelectorAll('button').forEach(btn => {
+                if (!btn.id.includes('Tab')) btn.disabled = disabled;
+                btn.classList.toggle('btn-disabled', disabled && !btn.id.includes('Tab'));
+            });
+        }
+
+        // Show panel (User or Admin)
+        function showPanel(panel) {
+            const userPanel = document.getElementById('userPanel');
+            const adminPanel = document.getElementById('adminPanel');
+            const userTab = document.getElementById('userTab');
+            const adminTab = document.getElementById('adminTab');
+
+            if (panel === 'user') {
+                userPanel.classList.remove('hidden');
+                adminPanel.classList.add('hidden');
+                userTab.classList.add('tab-active');
+                userTab.classList.remove('tab-inactive');
+                adminTab.classList.add('tab-inactive');
+                adminTab.classList.remove('tab-active');
+            } else {
+                userPanel.classList.add('hidden');
+                adminPanel.classList.remove('hidden');
+                adminTab.classList.add('tab-active');
+                adminTab.classList.remove('tab-inactive');
+                userTab.classList.add('tab-inactive');
+                userTab.classList.remove('tab-active');
+            }
+        }
+
+        // Initialize Web3
+        async function initWeb3() {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    accounts = await web3.eth.getAccounts();
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                    document.getElementById('walletStatus').innerText = `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`;
+                    showToast("Wallet connected successfully!");
+                } catch (error) {
+                    document.getElementById('walletStatus').innerText = "Connection failed";
+                    showToast(`Error: ${error.message}`, 'error');
+                }
+            } else {
+                document.getElementById('walletStatus').innerText = "Please install MetaMask!";
+                showToast("MetaMask not detected", 'error');
+            }
+        }
+
+        // Register identity
+        async function registerIdentity() {
+            const name = document.getElementById('name').value.trim();
+            const uniqueId = document.getElementById('uniqueId').value.trim();
+            if (!name || !uniqueId) {
+                showToast("Name and Unique ID are required", 'error');
+                return;
+            }
+            toggleButtons(true);
+            try {
+                await contract.methods.registerIdentity(name, uniqueId).send({ from: accounts[0] });
+                showToast("Identity registered successfully!");
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                toggleButtons(false);
+            }
+        }
+
+        // Verify identity
+        async function verifyIdentity() {
+            const userAddress = document.getElementById('userAddress').value.trim();
+            if (!web3.utils.isAddress(userAddress)) {
+                showToast("Invalid user address", 'error');
+                return;
+            }
+            toggleButtons(true);
+            try {
+                await contract.methods.verifyIdentity(userAddress).send({ from: accounts[0] });
+                showToast("Identity verified successfully!");
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                toggleButtons(false);
+            }
+        }
+
+        // Check verification status
+        async function checkVerification() {
+            const checkAddress = document.getElementById('checkAddress').value.trim();
+            if (!web3.utils.isAddress(checkAddress)) {
+                showToast("Invalid address", 'error');
+                return;
+            }
+            toggleButtons(true);
+            try {
+                const isVerified = await contract.methods.checkVerification(checkAddress).call();
+                const { 0: name, 1: uniqueId, 2: verified } = await contract.methods.getIdentity(checkAddress).call();
+                showToast(`Name: ${name}, ID: ${uniqueId}, Verified: ${verified}`);
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                toggleButtons(false);
+            }
+        }
+
+        // Add new admin
+        async function addAdmin() {
+            const newAdmin = document.getElementById('newAdmin').value.trim();
+            if (!web3.utils.isAddress(newAdmin)) {
+                showToast("Invalid admin address", 'error');
+                return;
+            }
+            toggleButtons(true);
+            try {
+                await contract.methods.addAdmin(newAdmin).send({ from: accounts[0] });
+                showToast("Admin added successfully!");
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                toggleButtons(false);
+            }
+        }
+
+        // Initialize on load
+        window.onload = initWeb3;
+    </script>
+</body>
+</html>
